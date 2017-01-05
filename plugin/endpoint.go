@@ -109,6 +109,17 @@ func (endpoint ShieldEndpoint) ArrayValue(key string) ([]interface{}, error) {
 	return endpoint[key].([]interface{}), nil
 }
 
+func (endpoint ShieldEndpoint) ArrayValueDefault(key string, def []interface{}) ([]interface{}, error) {
+	tf, err := endpoint.ArrayValue(key)
+	if err == nil {
+		return tf, nil
+	}
+	if _, ok := err.(EndpointMissingRequiredDataError); ok {
+		return def, nil
+	}
+	return endpoint[key].([]interface{}), err
+}
+
 func (endpoint ShieldEndpoint) MapValue(key string) (map[string]interface{}, error) {
 	_, ok := endpoint[key]
 	if !ok {

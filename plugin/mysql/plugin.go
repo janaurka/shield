@@ -25,6 +25,7 @@
 //        "mysql_read_replica":"hostname-or-ip-of-mysql-replica-server",  #OPTIONAL
 //        "mysql_database": "your-database-name",  #OPTIONAL
 //        "mysql_options": "mysqldump-specific-options" #OPTIONAL
+//        "mysql_valid_exit_code": "mysqldump-valid-exec-code" #OPTIONAL
 //    }
 //
 // BACKUP DETAILS
@@ -36,6 +37,9 @@
 //
 // The mysql_options setting can apply mysqldump specific options like --force, --quick and/or
 // --single-transaction
+//
+// The mysql_valid_exit_code expects an []int including _all_ valid exit codes. For example
+// []int{0,2} to allow the exit codes 0 and 2.
 //
 // Backing up with the `mysql` plugin will not drop any existing connections to the database,
 // or restart the service.
@@ -70,6 +74,7 @@ import (
 
 var (
 	DefaultPort = "3306"
+	DefaultValidExitCode = []int{0}
 )
 
 func main() {
@@ -97,6 +102,7 @@ type MySQLConnectionInfo struct {
 	Replica  string
 	Database string
 	Options	 string
+	Exitcode []int
 }
 
 func (p MySQLPlugin) Meta() PluginInfo {
@@ -163,6 +169,16 @@ func (p MySQLPlugin) Validate(endpoint ShieldEndpoint) error {
 		ansi.Printf("@G{\u2713 mysql_options}  @C{%s}\n", s)
 	}
 
+	s, err = endpoint.StringValueDefault("mysql_valid_exit_code", DefaultValidExitCode)
+	if err != nil {
+		ansi.Printf("@R{\u2717 mysql_valid_exit_code  %s}\n", err)
+		fail = true
+	} else if s == "" {
+		ansi.Printf("@G{\u2713 mysql_valid_exit_code}  no options given - only allow exit cod e0\n")
+	} else {
+		ansi.Printf("@G{\u2713 mysql_valid_exit_code}  @C{%s}\n", s)
+	}
+
 	if fail {
 		return fmt.Errorf("mysql: invalid configuration")
 	}
@@ -181,8 +197,16 @@ func (p MySQLPlugin) Backup(endpoint ShieldEndpoint) error {
 	}
 
 	cmd := fmt.Sprintf("%s/mysqldump %s %s", mysql.Bin, mysql.Options, connectionString(mysql, true))
+
+	opts := ExecOptions{
+		Cmd:    cmd,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		ExpectRC: mysql.Exitcode,
+	}
+
 	DEBUG("Executing: `%s`", cmd)
-	return Exec(cmd, STDOUT)
+	return ExecWithOptions(opts)
 }
 
 // Restore mysql database
@@ -192,9 +216,19 @@ func (p MySQLPlugin) Restore(endpoint ShieldEndpoint) error {
 		return err
 	}
 
+
+
 	cmd := fmt.Sprintf("%s/mysql %s", mysql.Bin, connectionString(mysql, false))
+
+	opts := ExecOptions{
+		Cmd:    cmd,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		ExpectRC: mysql.Exitcode,
+	}
+
 	DEBUG("Exec: %s", cmd)
-	return Exec(cmd, STDIN)
+	return ExecWithOptions(opts)
 }
 
 func (p MySQLPlugin) Store(endpoint ShieldEndpoint) (string, error) {
@@ -260,6 +294,12 @@ func mysqlConnectionInfo(endpoint ShieldEndpoint) (*MySQLConnectionInfo, error) 
 	}
 	DEBUG("MYSQL_OPTIONS: '%s'", options)
 
+	exitcode, err := endpoint.ArrayValueDefault("mysql_valid_exit_code", DefaultValidExitCode)
+	if err != nil {
+		return nil, err
+	}
+	DEBUG("MYSQL_VALID_EXIT_CODE: '%s'", exitcode)
+
 	db, err := endpoint.StringValueDefault("mysql_database", "")
 	if err != nil {
 		return nil, err
@@ -278,5 +318,6 @@ func mysqlConnectionInfo(endpoint ShieldEndpoint) (*MySQLConnectionInfo, error) 
 		Replica:  replica,
 		Database: db,
 		Options: options,
+		Exitcode: exitcode,
 	}, nil
 }
