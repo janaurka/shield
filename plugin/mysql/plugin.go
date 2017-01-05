@@ -112,6 +112,7 @@ func (p MySQLPlugin) Meta() PluginInfo {
 func (p MySQLPlugin) Validate(endpoint ShieldEndpoint) error {
 	var (
 		s    string
+		i    []interface{}
 		err  error
 		fail bool
 	)
@@ -169,14 +170,14 @@ func (p MySQLPlugin) Validate(endpoint ShieldEndpoint) error {
 		ansi.Printf("@G{\u2713 mysql_options}  @C{%s}\n", s)
 	}
 
-	s, err = endpoint.StringValueDefault("mysql_valid_exit_code", DefaultValidExitCode)
+	i, err = endpoint.ArrayValueDefault("mysql_valid_exit_code", DefaultValidExitCode)
 	if err != nil {
-		ansi.Printf("@R{\u2717 mysql_valid_exit_code  %s}\n", err)
+		ansi.Printf("@R{\u2717 mysql_valid_exit_code  %i}\n", err)
 		fail = true
-	} else if s == "" {
-		ansi.Printf("@G{\u2713 mysql_valid_exit_code}  no options given - only allow exit cod e0\n")
+	} else if len(i) == 0 {
+		ansi.Printf("@G{\u2713 mysql_valid_exit_code}  no options given - only allow exit code @C{%i}\n", DefaultValidExitCode)
 	} else {
-		ansi.Printf("@G{\u2713 mysql_valid_exit_code}  @C{%s}\n", s)
+		ansi.Printf("@G{\u2713 mysql_valid_exit_code}  @C{%i}\n", i)
 	}
 
 	if fail {
@@ -298,7 +299,7 @@ func mysqlConnectionInfo(endpoint ShieldEndpoint) (*MySQLConnectionInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-	DEBUG("MYSQL_VALID_EXIT_CODE: '%s'", exitcode)
+	DEBUG("MYSQL_VALID_EXIT_CODE: '%i'", exitcode)
 
 	db, err := endpoint.StringValueDefault("mysql_database", "")
 	if err != nil {
